@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticate } from "@/lib/users";
+import { describeServerError } from "@/lib/errors";
 import { clientIp, limited } from "@/lib/rate-limit";
 import { SESSION_COOKIE, cookieOptions, createSessionToken, type Role } from "@/lib/session";
 
@@ -34,10 +35,8 @@ export async function POST(req: Request) {
     const res = NextResponse.json({ ok: true });
     res.cookies.set(SESSION_COOKIE, token, cookieOptions);
     return res;
-  } catch {
-    return NextResponse.json(
-      { error: "Erro no servidor. Confirme as variáveis de ambiente e a base de dados." },
-      { status: 500 },
-    );
+  } catch (e) {
+    console.error("ERRO_PAINEL (login):", e);
+    return NextResponse.json({ error: describeServerError(e) }, { status: 500 });
   }
 }

@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { needsSetup } from "@/lib/setup";
 import LoginForm from "./LoginForm";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +11,7 @@ export default async function LoginPage({
 }) {
   const { next } = await searchParams;
   const safeNext = next && next.startsWith("/manager") ? next : "/manager";
+  const firstRun = await needsSetup().catch(() => false);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-10">
@@ -22,6 +25,14 @@ export default async function LoginPage({
         <p className="mt-4 text-center font-body text-sm leading-relaxed text-gold/70">
           Acesso reservado a administradores e gestores.
         </p>
+        {firstRun && (
+          <p className="mt-6 text-center font-body text-sm text-gold/70">
+            Ainda não existe nenhuma conta.{" "}
+            <Link href="/configurar" className="text-gold underline underline-offset-4">
+              Criar a conta de administrador
+            </Link>
+          </p>
+        )}
         <LoginForm next={safeNext} />
       </div>
     </main>
