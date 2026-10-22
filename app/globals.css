@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html,
+  body {
+    background: #0b0b0b;
+    color: #c9a962;
+  }
+  ::selection {
+    background: #c9a962;
+    color: #0b0b0b;
+  }
+  select option {
+    background: #111111;
+    color: #c9a962;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
