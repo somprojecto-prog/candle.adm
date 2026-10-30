@@ -13,7 +13,8 @@ export type Country = (typeof COUNTRIES)[number];
 export const MAX_QUANTITY = 10;
 
 /** Preço unitário em euros. Define ORDER_UNIT_PRICE no .env. */
-export const UNIT_PRICE = Number(process.env.ORDER_UNIT_PRICE ?? 0);
+const rawPrice = (process.env.ORDER_UNIT_PRICE ?? "0").replace(",", ".").replace(/[^0-9.]/g, "");
+export const UNIT_PRICE = Number(rawPrice) || 0;
 
 export type OrderAddress = {
   street: string;

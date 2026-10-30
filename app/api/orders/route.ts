@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { corsHeaders } from "@/lib/cors";
+import { describeServerError } from "@/lib/errors";
 import { clientIp, limited } from "@/lib/rate-limit";
 import { createOrder } from "@/lib/orders/repository";
 import { createOrderSchema, firstError } from "@/lib/orders/validation";
@@ -40,10 +41,8 @@ export async function POST(req: Request) {
       { orderNumber: order.orderNumber, total: order.total },
       { status: 201, headers },
     );
-  } catch {
-    return NextResponse.json(
-      { error: "Não foi possível registar a encomenda. Tente novamente." },
-      { status: 500, headers },
-    );
+  } catch (e) {
+    console.error("ERRO_PAINEL (encomenda):", e);
+    return NextResponse.json({ error: describeServerError(e) }, { status: 500, headers });
   }
 }
