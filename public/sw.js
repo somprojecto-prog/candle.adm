@@ -9,8 +9,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(d.title || "CTRL + SHIFT + CANDLE", {
       body: d.body || "Nova encomenda recebida.",
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
+      icon: d.icon || "/icon-192.png",
+      badge: d.badge || "/icon-192.png",
       tag: d.tag || "encomenda",
       data: { url: d.url || "/manager" },
     }),

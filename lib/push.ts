@@ -56,6 +56,8 @@ export async function notifyNewOrder(order: Order): Promise<void> {
         title: "CTRL + SHIFT + CANDLE",
         body: `Nova encomenda ${order.orderNumber}\n${order.customerName} · ${order.quantity} × · ${money(order.total)}`,
         tag: order.orderNumber,
+        icon: "/icon-order.png",
+        badge: "/badge-order.png",
         url: `/manager/${order.id}`,
       }),
     );
@@ -83,6 +85,8 @@ export async function notifyNewRegistration(name: string, email: string): Promis
         title: "CTRL + SHIFT + CANDLE",
         body: `Novo pedido de conta\n${name} · ${email}`,
         tag: `registo-${email}`,
+        icon: "/icon-user.png",
+        badge: "/badge-user.png",
         url: "/manager/utilizadores",
       }),
     );
