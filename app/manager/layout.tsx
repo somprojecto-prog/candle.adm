@@ -1,14 +1,33 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { getSession } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import LogoutButton from "./LogoutButton";
+import OrderAlerts from "./OrderAlerts";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  manifest: "/manifest.webmanifest",
+  icons: { apple: "/icon-192.png" },
+};
+
+/** Pedidos de conta à espera de aprovação. Nunca falha a página. */
+async function pendingCount(): Promise<number> {
+  try {
+    return await prisma.user.count({ where: { pending: true } });
+  } catch {
+    return 0;
+  }
+}
 
 export default async function ManagerLayout({ children }: { children: ReactNode }) {
   const session = await getSession();
   if (!session) redirect("/login");
+
+  const pending = session.role === "admin" ? await pendingCount() : 0;
 
   return (
     <div className="min-h-screen">
@@ -25,6 +44,11 @@ export default async function ManagerLayout({ children }: { children: ReactNode 
               {session.role === "admin" && (
                 <Link href="/manager/utilizadores" className="transition-colors hover:text-gold">
                   Utilizadores
+                  {pending > 0 && (
+                    <span className="ml-2 rounded-full bg-gold px-2 py-0.5 text-[0.6rem] tracking-normal text-ink">
+                      {pending}
+                    </span>
+                  )}
                 </Link>
               )}
             </nav>
@@ -41,6 +65,7 @@ export default async function ManagerLayout({ children }: { children: ReactNode 
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">{children}</main>
+      <OrderAlerts />
     </div>
   );
 }
