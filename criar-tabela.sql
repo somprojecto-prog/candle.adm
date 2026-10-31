@@ -10,3 +10,6 @@ CREATE TABLE IF NOT EXISTS "PushSubscription" (
   CONSTRAINT "PushSubscription_pkey" PRIMARY KEY ("id")
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
+
+-- Pedidos de conta pendentes de aprovação (contas já existentes ficam como estão).
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "pending" BOOLEAN NOT NULL DEFAULT false;
