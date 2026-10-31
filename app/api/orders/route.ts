@@ -1,11 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { corsHeaders } from "@/lib/cors";
 import { describeServerError } from "@/lib/errors";
 import { clientIp, limited } from "@/lib/rate-limit";
 import { createOrder } from "@/lib/orders/repository";
 import { createOrderSchema, firstError } from "@/lib/orders/validation";
+import { notifyNewOrder } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export function OPTIONS(req: Request) {
   return new NextResponse(null, { status: 204, headers: corsHeaders(req) });
@@ -36,6 +38,8 @@ export async function POST(req: Request) {
 
   try {
     const order = await createOrder(parsed.data);
+    // Avisa o administrador depois de responder ao cliente.
+    after(() => notifyNewOrder(order));
     // Só devolve o necessário ao cliente.
     return NextResponse.json(
       { orderNumber: order.orderNumber, total: order.total },

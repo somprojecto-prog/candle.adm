@@ -38,3 +38,13 @@ model User {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 }
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userId    String
+  userAgent String   @default("")
+  createdAt DateTime @default(now())
+}
