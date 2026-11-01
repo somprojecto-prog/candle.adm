@@ -75,8 +75,9 @@ export async function notifyNewOrder(order: Order): Promise<void> {
   try {
     if (!configure()) return;
     const subs = await prisma.pushSubscription.findMany();
+    console.log(`PUSH encomenda ${order.orderNumber}: ${subs.length} aparelho(s) registado(s)`);
     if (subs.length === 0) return;
-    await sendToSubs(
+    const results = await sendToSubs(
       subs,
       JSON.stringify({
         title: "CTRL + SHIFT + CANDLE",
@@ -87,6 +88,7 @@ export async function notifyNewOrder(order: Order): Promise<void> {
         url: `/manager/${order.id}`,
       }),
     );
+    console.log(`PUSH encomenda ${order.orderNumber}: resultado`, JSON.stringify(results));
   } catch (e) {
     console.error("ERRO_PUSH:", e);
   }

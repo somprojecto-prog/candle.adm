@@ -1,4 +1,4 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { corsHeaders } from "@/lib/cors";
 import { describeServerError } from "@/lib/errors";
 import { clientIp, limited } from "@/lib/rate-limit";
@@ -38,8 +38,8 @@ export async function POST(req: Request) {
 
   try {
     const order = await createOrder(parsed.data);
-    // Avisa o administrador depois de responder ao cliente.
-    after(() => notifyNewOrder(order));
+    // Avisa o administrador (espera no máximo 4 s para não atrasar o cliente).
+    await Promise.race([notifyNewOrder(order), new Promise((r) => setTimeout(r, 4000))]);
     // Só devolve o necessário ao cliente.
     return NextResponse.json(
       { orderNumber: order.orderNumber, total: order.total },
