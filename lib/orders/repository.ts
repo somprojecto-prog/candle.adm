@@ -1,6 +1,13 @@
 import { Prisma, type Order as Row } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { ORDER_STATUSES, UNIT_PRICE, type Order, type OrderStatus } from "./types";
+import {
+  ORDER_STATUSES,
+  UNIT_PRICE,
+  type Order,
+  type OrderStatus,
+  type PaymentMethod,
+  type PaymentStatus,
+} from "./types";
 import type { CreateOrderInput, UpdateOrderInput } from "./validation";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -18,6 +25,7 @@ function toOrder(r: Row): Order {
       number: r.number,
       complement: r.complement,
       city: r.city,
+      state: r.state,
       postalCode: r.postalCode,
       country: r.country,
     },
@@ -25,6 +33,9 @@ function toOrder(r: Row): Order {
     notes: r.notes,
     unitPrice: r.unitPrice,
     total: r.total,
+    paymentMethod: r.paymentMethod as PaymentMethod,
+    paymentStatus: r.paymentStatus as PaymentStatus,
+    paidAt: r.paidAt ? r.paidAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
@@ -45,12 +56,15 @@ export async function createOrder(input: CreateOrderInput): Promise<Order> {
           number: input.address.number,
           complement: input.address.complement,
           city: input.address.city,
+          state: input.address.state,
           postalCode: input.address.postalCode,
           country: input.address.country,
           quantity: input.quantity,
           notes: input.notes,
           unitPrice: UNIT_PRICE,
           total: round2(UNIT_PRICE * input.quantity),
+          paymentMethod: input.paymentMethod,
+          paymentStatus: "por_pagar",
         },
       });
       return toOrder(row);
@@ -101,6 +115,11 @@ export async function getOrder(id: string): Promise<Order | null> {
   return row ? toOrder(row) : null;
 }
 
+export async function getOrderByNumber(orderNumber: string): Promise<Order | null> {
+  const row = await prisma.order.findUnique({ where: { orderNumber } });
+  return row ? toOrder(row) : null;
+}
+
 export async function updateOrder(id: string, input: UpdateOrderInput): Promise<Order | null> {
   const current = await prisma.order.findUnique({ where: { id } });
   if (!current) return null;
@@ -114,6 +133,7 @@ export async function updateOrder(id: string, input: UpdateOrderInput): Promise<
       number: input.address.number,
       complement: input.address.complement,
       city: input.address.city,
+      state: input.address.state || undefined,
       postalCode: input.address.postalCode,
       country: input.address.country,
       quantity: input.quantity,
@@ -122,4 +142,39 @@ export async function updateOrder(id: string, input: UpdateOrderInput): Promise<
     },
   });
   return toOrder(row);
+}
+
+/* ---------- Pagamentos ---------- */
+
+export async function attachStripeSession(id: string, sessionId: string): Promise<void> {
+  await prisma.order.update({ where: { id }, data: { stripeSessionId: sessionId } });
+}
+
+/** Cancela uma encomenda cujo pagamento online não chegou a arrancar. */
+export async function cancelOrderById(id: string): Promise<void> {
+  await prisma.order.update({
+    where: { id },
+    data: { status: "cancelada", paymentStatus: "expirada" },
+  });
+}
+
+/**
+ * Marca como paga. Devolve a encomenda só na primeira vez (evita avisos e
+ * alterações repetidas se o Stripe reenviar o mesmo evento); depois devolve null.
+ */
+export async function markOrderPaid(orderNumber: string): Promise<Order | null> {
+  const res = await prisma.order.updateMany({
+    where: { orderNumber, paymentStatus: { not: "paga" } },
+    data: { paymentStatus: "paga", paidAt: new Date(), status: "confirmada" },
+  });
+  if (res.count === 0) return null;
+  return getOrderByNumber(orderNumber);
+}
+
+/** Sessão de pagamento expirada sem pagamento: cancela a encomenda. */
+export async function markOrderExpired(orderNumber: string): Promise<void> {
+  await prisma.order.updateMany({
+    where: { orderNumber, paymentMethod: "online", paymentStatus: "por_pagar" },
+    data: { paymentStatus: "expirada", status: "cancelada" },
+  });
 }

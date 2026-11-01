@@ -2,9 +2,10 @@ import { NextResponse, after } from "next/server";
 import { corsHeaders } from "@/lib/cors";
 import { describeServerError } from "@/lib/errors";
 import { clientIp, limited } from "@/lib/rate-limit";
-import { createOrder } from "@/lib/orders/repository";
+import { attachStripeSession, cancelOrderById, createOrder } from "@/lib/orders/repository";
 import { createOrderSchema, firstError } from "@/lib/orders/validation";
 import { notifyNewOrder } from "@/lib/push";
+import { createCheckout } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,12 +39,36 @@ export async function POST(req: Request) {
 
   try {
     const order = await createOrder(parsed.data);
-    // Avisa o administrador. O envio continua em segundo plano mesmo depois de
-    // responder ao cliente (after), e só espera até 3 s para não o atrasar.
+
+    // Pagamento online: leva o cliente à página segura do Stripe.
+    // O administrador só é avisado quando o pagamento for confirmado (webhook).
+    if (order.paymentMethod === "online") {
+      try {
+        const checkout = await createCheckout(order);
+        await attachStripeSession(order.id, checkout.id);
+        return NextResponse.json(
+          { orderNumber: order.orderNumber, total: order.total, checkoutUrl: checkout.url },
+          { status: 201, headers },
+        );
+      } catch (e) {
+        console.error("ERRO_PAINEL (stripe):", e);
+        await cancelOrderById(order.id).catch(() => {});
+        return NextResponse.json(
+          {
+            error:
+              "Não foi possível iniciar o pagamento online. Tente novamente ou escolha pagar na entrega.",
+          },
+          { status: 500, headers },
+        );
+      }
+    }
+
+    // Pagamento na entrega: avisa já o administrador.
+    // O envio continua em segundo plano mesmo depois de responder ao cliente
+    // (after), e só espera até 3 s para não o atrasar.
     const push = notifyNewOrder(order);
     after(() => push);
     await Promise.race([push, new Promise((r) => setTimeout(r, 3000))]);
-    // Só devolve o necessário ao cliente.
     return NextResponse.json(
       { orderNumber: order.orderNumber, total: order.total },
       { status: 201, headers },
