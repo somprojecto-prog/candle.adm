@@ -28,6 +28,12 @@ function keyToBytes(b64url: string) {
   return out;
 }
 
+function sameKey(a: ArrayBuffer | null | undefined, b: Uint8Array) {
+  if (!a) return false;
+  const x = new Uint8Array(a);
+  return x.length === b.length && x.every((v, i) => v === b[i]);
+}
+
 function beep() {
   try {
     const AC =
@@ -66,6 +72,7 @@ export default function OrderAlerts() {
   const [push, setPush] = useState<PushState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<Latest | null>(null);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
   const lastId = useRef<string | null | undefined>(undefined);
 
   // --- Estado inicial das notificações push ---
@@ -77,7 +84,19 @@ export default function OrderAlerts() {
       try {
         const reg = await navigator.serviceWorker.register("/sw.js");
         if (Notification.permission === "denied") return setPush("denied");
-        const sub = await reg.pushManager.getSubscription();
+        let sub = await reg.pushManager.getSubscription();
+        const wanted = keyToBytes(VAPID_KEY);
+        // Subscrição feita com outras chaves: refaz com as actuais.
+        if (sub && !sameKey(sub.options?.applicationServerKey, wanted)) {
+          await sub.unsubscribe().catch(() => {});
+          sub = null;
+          if (Notification.permission === "granted") {
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: wanted,
+            });
+          }
+        }
         if (sub && Notification.permission === "granted") {
           await postSub(sub).catch(() => {}); // volta a registar se tiver sido limpo
           return setPush("on");
@@ -108,6 +127,29 @@ export default function OrderAlerts() {
       setPush("on");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível activar as notificações.");
+    }
+  }
+
+  async function test() {
+    setTestMsg("A enviar teste…");
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const d = await res.json();
+      if (!res.ok) return setTestMsg(d.error ?? "Falhou o teste.");
+      if (!d.configured)
+        return setTestMsg("O servidor não tem as chaves de notificação configuradas na Vercel.");
+      if (d.devices === 0)
+        return setTestMsg("Este aparelho não está registado. Desactive e active outra vez.");
+      const ok = d.results.filter((r: { ok: boolean }) => r.ok).length;
+      if (ok > 0) return setTestMsg(`Enviado para ${ok} aparelho(s). Deve chegar dentro de segundos.`);
+      const code = d.results[0]?.status;
+      if (code === 404 || code === 410)
+        return setTestMsg("O registo tinha expirado. Carregue em activar outra vez.");
+      if (code === 401 || code === 403)
+        return setTestMsg("As chaves não coincidem. Desactive e active outra vez.");
+      setTestMsg(`Falhou o envio (código ${code ?? "desconhecido"}).`);
+    } catch {
+      setTestMsg("Sem ligação ao servidor.");
     }
   }
 
@@ -218,10 +260,20 @@ export default function OrderAlerts() {
             Activar notificações
           </button>
         )}
+        {testMsg && (
+          <p role="status" className="max-w-xs rounded-lg bg-[#111111] px-3 py-2 font-body text-xs text-[#C9A962]/90">
+            {testMsg}
+          </p>
+        )}
         {push === "on" && (
-          <button type="button" onClick={disable} className={btn} title="Clique para desactivar neste aparelho">
-            Notificações activas ✓
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={test} className={btn}>
+              Testar
+            </button>
+            <button type="button" onClick={disable} className={btn} title="Clique para desactivar neste aparelho">
+              Notificações activas ✓
+            </button>
+          </div>
         )}
         {push === "denied" && (
           <p className="max-w-xs rounded-lg bg-[#111111] px-3 py-2 font-body text-xs text-[#C9A962]/80">

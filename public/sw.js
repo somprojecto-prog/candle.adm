@@ -32,3 +32,25 @@ self.addEventListener("notificationclick", (event) => {
     }),
   );
 });
+
+// Se o browser renovar a subscrição, regista a nova no servidor.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const old = event.oldSubscription;
+        const key = old && old.options && old.options.applicationServerKey;
+        if (!key) return;
+        const sub = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: key,
+        });
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sub.toJSON()),
+        });
+      } catch (_) {}
+    })(),
+  );
+});

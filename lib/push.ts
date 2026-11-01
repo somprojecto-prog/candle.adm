@@ -22,16 +22,18 @@ const money = (n: number) =>
   new Intl.NumberFormat("pt-PT", { style: "currency", currency: "USD" }).format(n);
 
 type Sub = { endpoint: string; p256dh: string; auth: string };
+export type SendResult = { ok: boolean; status?: number };
 
-async function sendToSubs(subs: Sub[], payload: string): Promise<void> {
-  await Promise.all(
-    subs.map(async (s) => {
+async function sendToSubs(subs: Sub[], payload: string): Promise<SendResult[]> {
+  return Promise.all(
+    subs.map(async (s): Promise<SendResult> => {
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           payload,
           { TTL: 60 * 60 * 24, urgency: "high" },
         );
+        return { ok: true };
       } catch (e) {
         const code = (e as { statusCode?: number })?.statusCode;
         if (code === 404 || code === 410) {
@@ -39,9 +41,33 @@ async function sendToSubs(subs: Sub[], payload: string): Promise<void> {
         } else {
           console.error("ERRO_PUSH (envio):", code ?? e);
         }
+        return { ok: false, status: code };
       }
     }),
   );
+}
+
+/** Envia uma notificação de teste aos aparelhos do utilizador e diz o que aconteceu. */
+export async function sendTestToUser(userId: string) {
+  try {
+    if (!configure()) return { configured: false, devices: 0, results: [] as SendResult[] };
+    const subs = await prisma.pushSubscription.findMany({ where: { userId } });
+    const results = await sendToSubs(
+      subs,
+      JSON.stringify({
+        title: "CTRL + SHIFT + CANDLE",
+        body: "Teste de notificação\nSe vê isto, está tudo a funcionar.",
+        tag: "teste",
+        icon: "/icon-order.png",
+        badge: "/badge-order.png",
+        url: "/manager",
+      }),
+    );
+    return { configured: true, devices: subs.length, results };
+  } catch (e) {
+    console.error("ERRO_PUSH (teste):", e);
+    return { configured: false, devices: 0, results: [] as SendResult[] };
+  }
 }
 
 /** Aviso de nova encomenda a todos os aparelhos registados. Nunca lança erro. */
