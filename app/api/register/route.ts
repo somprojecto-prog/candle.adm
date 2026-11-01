@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -50,7 +50,9 @@ export async function POST(req: Request) {
     await prisma.user.create({
       data: { name, email, passwordHash, role: "manager", active: false, pending: true },
     });
-    await Promise.race([notifyNewRegistration(name, email), new Promise((r) => setTimeout(r, 4000))]);
+    const push = notifyNewRegistration(name, email);
+    after(() => push);
+    await Promise.race([push, new Promise((r) => setTimeout(r, 3000))]);
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

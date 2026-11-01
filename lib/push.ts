@@ -21,28 +21,39 @@ function configure(): boolean {
 const money = (n: number) =>
   new Intl.NumberFormat("pt-PT", { style: "currency", currency: "USD" }).format(n);
 
-type Sub = { endpoint: string; p256dh: string; auth: string };
+type Sub = { endpoint: string; p256dh: string; auth: string; userAgent?: string };
 export type SendResult = { ok: boolean; status?: number };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function sendToSubs(subs: Sub[], payload: string): Promise<SendResult[]> {
   return Promise.all(
     subs.map(async (s): Promise<SendResult> => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          payload,
-          { TTL: 60 * 60 * 24, urgency: "high" },
-        );
-        return { ok: true };
-      } catch (e) {
-        const code = (e as { statusCode?: number })?.statusCode;
-        if (code === 404 || code === 410) {
-          await prisma.pushSubscription.deleteMany({ where: { endpoint: s.endpoint } });
-        } else {
-          console.error("ERRO_PUSH (envio):", code ?? e);
+      const who = (s.userAgent ?? "").slice(0, 60) || new URL(s.endpoint).host;
+      let code: number | undefined;
+      // Até 3 tentativas para falhas passageiras (rede, 5xx, 429).
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await webpush.sendNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            payload,
+            { TTL: 60 * 60 * 24, urgency: "high" },
+          );
+          console.log(`PUSH ok (${who}) tentativa ${attempt}`);
+          return { ok: true };
+        } catch (e) {
+          code = (e as { statusCode?: number })?.statusCode;
+          if (code === 404 || code === 410) {
+            console.warn(`PUSH registo expirado, removido (${who}) código ${code}`);
+            await prisma.pushSubscription.deleteMany({ where: { endpoint: s.endpoint } });
+            return { ok: false, status: code };
+          }
+          console.error(`PUSH falhou (${who}) tentativa ${attempt} código`, code ?? e);
+          if (code === 401 || code === 403) break; // chaves erradas: repetir não ajuda
+          if (attempt < 3) await sleep(500 * attempt);
         }
-        return { ok: false, status: code };
       }
+      return { ok: false, status: code };
     }),
   );
 }
